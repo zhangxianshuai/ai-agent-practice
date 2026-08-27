@@ -8,6 +8,9 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.milvus.MilvusVectorStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -15,6 +18,7 @@ import reactor.core.publisher.Flux;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/ai")
@@ -23,12 +27,14 @@ public class ChatController {
     private final ChatModel chatModel;
     private final ChatClient chatClient;
     private final WeatherTools weatherTools;
+    private final MilvusVectorStore vectorStore; // 👈 注入向量库
 
     // 注入 ChatClient 构建器和工具类
-    public ChatController(ChatClient.Builder builder, WeatherTools weatherTools, ChatModel chatModel) {
+    public ChatController(ChatClient.Builder builder, WeatherTools weatherTools, ChatModel chatModel, MilvusVectorStore vectorStore) {
         this.weatherTools = weatherTools;
         this.chatClient = builder.build();
         this.chatModel = chatModel;
+        this.vectorStore = vectorStore;
     }
 
     @PostMapping("/chat")
@@ -86,5 +92,25 @@ public class ChatController {
                 .tools(weatherTools) // 依然保留工具调用能力
                 .stream()            // <--- 核心：改为 stream() 流式调用
                 .content();          // 只提取文本内容，以流的形式返回
+    }
+
+    // 👇 新增：语义检索接口
+    @GetMapping("/search")
+    public List<String> search(@RequestParam String query) {
+        // 1. 构建检索请求（默认相似度阈值为 0.7，最多返回 3 个结果）
+        // 新代码（使用 Builder 模式）
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(query)
+                .topK(3)
+                .similarityThreshold(0.2)
+                .build();
+
+        // 2. 执行检索，从 Milvus 中召回最相似的文本块
+        List<Document> relevantDocs = vectorStore.similaritySearch(searchRequest);
+
+        // 3. 提取并返回文本内容
+        return relevantDocs.stream()
+                .map(Document::getText)
+                .collect(Collectors.toList());
     }
 }
