@@ -113,4 +113,39 @@ public class ChatController {
                 .map(Document::getText)
                 .collect(Collectors.toList());
     }
+
+    // 👇 新增：RAG 问答接口
+    @GetMapping("/rag")
+    public String ragChat(@RequestParam String query) {
+        // 1. 检索：从 Milvus 中召回最相关的文本块
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(query)
+                .topK(3)
+                .similarityThreshold(0.2) // 先设为 0，保证能查出数据
+                .build();
+
+        List<Document> relevantDocs = vectorStore.similaritySearch(searchRequest);
+
+        // 2. 组装上下文：将检索到的文本块拼接成一个字符串
+        String context = relevantDocs.stream()
+                .map(Document::getText)
+                .collect(Collectors.joining("\n\n"));
+
+        // 3. 生成：将上下文和用户问题一起扔给大模型
+        String prompt = """
+                你是一个专业的知识库问答助手。
+                请严格根据以下参考资料来回答用户的问题。
+                如果参考资料中没有相关信息，请直接回答“我不知道”，不要瞎编。
+                
+                参考资料：
+                %s
+                
+                用户问题：%s
+                """.formatted(context, query);
+
+        return chatClient.prompt()
+                .user(prompt)
+                .call()
+                .content();
+    }
 }
