@@ -32,3 +32,7 @@ spring:
         index-type: IVF_FLAT
         metric-type: COSINE
         initialize-schema: true
+
+dify:
+  api-key: app-DIarjiRySxVlLoajBjXYuMIs # API 密钥
+  base-url: http://localhost/v1        # 本地部署的 Dify 默认地址
